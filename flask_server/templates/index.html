@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Accelerometer & Heartbeat Graph</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <style>
+        #postureStatus {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 20px;
+            color: green; /* Default to green for good posture */
+        }
+    </style>
+</head>
+<body>
+    <h1>Posture Detection & Heartbeat Real-Time Graphs</h1>
+    
+    <!-- Posture Chart (Accelerometer Data) -->
+    <h2>Posture (Accelerometer) Data</h2>
+    <canvas id="postureChart" width="800" height="400"></canvas>
+    <div id="postureStatus">Good Posture</div> <!-- Default status -->
+
+    <!-- Heartbeat Chart (BPM Data) -->
+    <h2>Heartbeat Data (BPM)</h2>
+    <canvas id="heartRateChart" width="800" height="400"></canvas>
+
+    <script>
+        // Initialize SocketIO connection
+        const socket = io();
+
+        // Configure the accelerometer (posture) chart
+        const postureCtx = document.getElementById('postureChart').getContext('2d');
+        const postureChart = new Chart(postureCtx, {
+            type: 'line',
+            data: {
+                labels: [], // Timestamps
+                datasets: [
+                    { label: 'X', data: [], borderColor: 'red', fill: false },
+                    { label: 'Y', data: [], borderColor: 'blue', fill: false },
+                    { label: 'Z', data: [], borderColor: 'green', fill: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { title: { display: true, text: 'Time' } },
+                    y: { title: { display: true, text: 'Acceleration (g)' } }
+                }
+            }
+        });
+
+        // Configure the heart rate chart
+        const heartCtx = document.getElementById('heartRateChart').getContext('2d');
+        const heartRateChart = new Chart(heartCtx, {
+            type: 'line',
+            data: {
+                labels: [], // Timestamps
+                datasets: [
+                    { 
+                        label: 'Heartbeat (BPM)', 
+                        data: [], 
+                        borderColor: 'purple', 
+                        fill: false 
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { title: { display: true, text: 'Time' } },
+                    y: { 
+                        title: { display: true, text: 'BPM' },
+                        suggestedMin: 40,
+                        suggestedMax: 180
+                    }
+                }
+            }
+        });
+
+        // Reference to the posture status div
+        const postureStatus = document.getElementById('postureStatus');
+
+        // Listen for 'update_graph' events and update the posture chart and status
+        socket.on('update_graph', (data) => {
+            console.log('Received posture data from server:', data); // Debug log
+
+            // Get the current timestamp
+            const currentTime = new Date().toLocaleTimeString();
+
+            // Add posture data to the posture chart
+            postureChart.data.labels.push(currentTime);
+            postureChart.data.datasets[0].data.push(data.x);
+            postureChart.data.datasets[1].data.push(data.y);
+            postureChart.data.datasets[2].data.push(data.z);
+
+            // Keep only the last 50 data points
+            if (postureChart.data.labels.length > 50) {
+                postureChart.data.labels.shift();
+                postureChart.data.datasets.forEach(dataset => dataset.data.shift());
+            }
+
+            // Update the posture chart display
+            postureChart.update();
+
+            // Determine posture status
+            if (data.x < 0.9 || Math.abs(data.y) > 0.3) {
+                postureStatus.textContent = 'Bad Posture';
+                postureStatus.style.color = 'red';
+            } else {
+                postureStatus.textContent = 'Good Posture';
+                postureStatus.style.color = 'green';
+            }
+        });
+
+        // Listen for 'update_heartbeat' events and update the heart rate chart
+        socket.on('update_heartbeat', (data) => {
+            console.log('Received heartbeat data from server:', data); // Debug log
+
+            // Current timestamp for heartbeat data
+            const currentTime = new Date().toLocaleTimeString();
+
+            // Add the new BPM value to the heart rate chart
+            heartRateChart.data.labels.push(currentTime);
+            heartRateChart.data.datasets[0].data.push(data.bpm);
+
+            // Keep only the last 50 data points
+            if (heartRateChart.data.labels.length > 50) {
+                heartRateChart.data.labels.shift();
+                heartRateChart.data.datasets[0].data.shift();
+            }
+
+            // Update the heart rate chart
+            heartRateChart.update();
+        });
+    </script>
+</body>
+</html>

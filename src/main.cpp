@@ -5,8 +5,8 @@
 #include "SparkFunLSM6DSO.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include <SPI.h>
 
-// Wi-Fi credentials (global for consistency)
 char ssid[50];
 char pass[50];
 
@@ -19,14 +19,17 @@ LSM6DSO myIMU;
 // Buzzer pin
 #define BUZZER_PIN 33
 
-// Bad posture detection thresholds
+// Posture thresholds
 const float ACCEL_X_BAD_THRESHOLD = 0.8;
 const float ACCEL_Y_THRESHOLD = 0.3;
-const unsigned long BAD_POSTURE_DURATION = 1000; // 1 second (adjust as needed)
+const unsigned long BAD_POSTURE_DURATION = 1000; // 1 second
 
 // Variables for posture tracking
 unsigned long badPostureStartTime = 0;
 bool inBadPosture = false;
+
+// Heartbeat sensor pin (analog input)
+const int sensorPin = 38; // Using GPIO38 for analog input
 
 // Function to initialize NVS
 esp_err_t initNVS() {
@@ -72,17 +75,15 @@ void nvs_access() {
 // Helper function for buzzing
 void buzz(int frequency, int duration) {
   tone(BUZZER_PIN, frequency, duration);
-  delay(duration);  // Wait for the duration of the tone
-  noTone(BUZZER_PIN);  // Stop the tone
+  delay(duration);  
+  noTone(BUZZER_PIN);  
 }
 
-// Placeholder function to read heartbeat from your sensor
-// Replace this with your actual heartbeat reading code.
-float readHeartbeat() {
-  // In a real scenario, read from your hardware sensor here.
-  // For example, if you have a pulse sensor, you'd use the library function.
-  // Here, we just return a simulated value.
-  return 72.0 + (random(0, 10) - 5); // A fake heartbeat around 72 BPM
+// Function to read raw heartbeat sensor data from analog pin
+float readHeartbeatRaw() {
+  // Note: This returns the raw ADC value. You may need additional processing.
+  int sensorValue = analogRead(sensorPin);
+  return (float)sensorValue; // raw value from 0-1023 if 10-bit resolution
 }
 
 void setup() {
@@ -103,6 +104,10 @@ void setup() {
 
   // Configure buzzer pin
   pinMode(BUZZER_PIN, OUTPUT);
+
+  // Configure heartbeat sensor analog read
+  analogReadResolution(10); // 10-bit resolution (0-1023)
+  pinMode(sensorPin, INPUT);
 
   // Retrieve Wi-Fi credentials from NVS
   nvs_access();
@@ -137,8 +142,8 @@ void loop() {
   float accelY = myIMU.readFloatAccelY();
   float accelZ = myIMU.readFloatAccelZ();
 
-  // Read heartbeat data
-  float heartbeat = readHeartbeat();
+  // Read heartbeat data (raw ADC value)
+  float heartbeat = readHeartbeatRaw();
 
   // Check for bad posture
   bool badPosture = (abs(accelX) < ACCEL_X_BAD_THRESHOLD) || (abs(accelY) > ACCEL_Y_THRESHOLD);
@@ -165,7 +170,7 @@ void loop() {
   Serial.print(accelY);
   Serial.print(", Accel Z: ");
   Serial.print(accelZ);
-  Serial.print(", Heartbeat: ");
+  Serial.print(", Heartbeat (raw): ");
   Serial.println(heartbeat);
 
   // Post data to Flask server along with heartbeat
@@ -175,7 +180,7 @@ void loop() {
     String url = String(serverName) + "/send_data?accelX=" + String(accelX) 
                  + "&accelY=" + String(accelY) 
                  + "&accelZ=" + String(accelZ)
-                 + "&heartbeat=" + String((int)heartbeat);
+                 + "&heartbeat=" + String((int)heartbeat);  // Cast heartbeat to int if desired
     Serial.println("Sending data to server:");
     Serial.println(url);
 

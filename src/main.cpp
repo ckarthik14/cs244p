@@ -83,6 +83,9 @@ void buzz(int frequency, int duration) {
 float readHeartbeatRaw() {
   // Note: This returns the raw ADC value. You may need additional processing.
   int sensorValue = analogRead(sensorPin);
+
+  analogReadResolution(10);
+
   return (float)sensorValue; // raw value from 0-1023 if 10-bit resolution
 }
 
